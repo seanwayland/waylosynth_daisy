@@ -2,6 +2,8 @@
 #include "daisysp.h"
 #include <stdio.h>
 #include <string.h>
+#include "ADSR.h"
+
 
 using namespace daisy;
 using namespace daisysp;
@@ -10,6 +12,29 @@ DaisyPod   hw;
 Oscillator osc;
 Fm2         fm_osc;
 Svf        filt;
+
+
+class WayloSynthVoice {       // The class
+  public: 
+  WayloSynthVoice() {}
+  Oscillator osc;
+  ADSR2 adsr;
+            
+};
+
+
+
+
+
+// when a note on is recieved the next empty oscillator is set to that midi note 
+// if 8 notes are playing nothing happens 
+
+
+int numPlayingNotes = 0;
+int numVoices = 4;
+
+
+
 
 void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
                    AudioHandle::InterleavingOutputBuffer out,
@@ -20,7 +45,8 @@ void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
     {
         sig = osc.Process();
         filt.Process(sig);
-        out[i] = out[i + 1] = filt.Low();
+        //out[i] = out[i + 1] = filt.Low();
+        out[i] = out[i + 1] = sig;
 
     }
 }
@@ -44,9 +70,6 @@ void HandleMidiMessage(MidiEvent m)
             if(m.data[1] != 0)
             {
                 p = m.AsNoteOn();
-                fm_osc.SetFrequency(mtof(p.note));
-                
-
                 osc.SetFreq(mtof(p.note));
                 osc.SetAmp((p.velocity / 127.0f));
             }
@@ -54,20 +77,20 @@ void HandleMidiMessage(MidiEvent m)
         break;
         case ControlChange:
         {
-            ControlChangeEvent p = m.AsControlChange();
-            switch(p.control_number)
-            {
-                case 1:
-                    // CC 1 for cutoff.
-                    filt.SetFreq(mtof((float)p.value));
-                    break;
-                case 2:
-                    // CC 2 for res.
-                    filt.SetRes(((float)p.value / 127.0f));
-                    break;
-                default: break;
-            }
-            break;
+            // ControlChangeEvent p = m.AsControlChange();
+            // switch(p.control_number)
+            // {
+            //     case 1:
+            //         // CC 1 for cutoff.
+            //         filt.SetFreq(mtof((float)p.value));
+            //         break;
+            //     case 2:
+            //         // CC 2 for res.
+            //         filt.SetRes(((float)p.value / 127.0f));
+            //         break;
+            //     default: break;
+            // }
+        break;
         }
         default: break;
     }
@@ -84,11 +107,19 @@ int main(void)
     hw.seed.usb_handle.Init(UsbHandle::FS_INTERNAL);
     System::Delay(250);
 
+
+
     // Synthesis
     samplerate = hw.AudioSampleRate();
     osc.Init(samplerate);
     osc.SetWaveform(Oscillator::WAVE_SIN);
     filt.Init(samplerate);
+
+    std::vector< WayloSynthVoice > WayloSynth;
+
+    for (int i = 0; i < numVoices; i++) {
+      WayloSynth.push_back(WayloSynthVoice());
+    }
 
     // Start stuff.
     hw.StartAdc();
